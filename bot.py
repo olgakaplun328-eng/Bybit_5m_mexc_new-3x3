@@ -164,11 +164,8 @@ class SignalEngine:
         if any(c is None for c in prior): return None
         pattern = self.pattern(prior + [live])
         if not pattern: return None
-        # Match the same setup rule used by the user's supplied working code.
-        first_color = candle_color(prior[0])
-        previous_ts = first_ts - TIMEFRAME_SECONDS
-        if previous_ts in self.candles and candle_color(self.candles[previous_ts]) == first_color:
-            return None
+        # The requested rule is based strictly on these six candles.
+        # Do not reject the pattern based on candle #0 before this six-candle block.
         return {**pattern, "start_ts": first_ts, "signal_ts": live["ts"]}
 
     def maybe_pre_alert(self, live):
@@ -230,9 +227,7 @@ class SignalEngine:
         if not p: return
         start_color = p["start_color"]
         start_ts = block[0]["ts"]
-        # Do not count a pattern if the same-color run extends before #1.
-        previous_ts = start_ts - TIMEFRAME_SECONDS
-        if previous_ts in self.candles and candle_color(self.candles[previous_ts]) == start_color: return
+        # Match the exact latest six-candle block; preceding candle color is irrelevant.
         if any(x.get("signal_ts") == ts for x in self.pending): return
         setup = {"start_ts": start_ts, "signal_ts": ts, "direction": p["direction"], "start_color": start_color}
         pat = "🔴🔴🔴🟢🟢🟢" if p["direction"] == "SHORT" else "🟢🟢🟢🔴🔴🔴"
