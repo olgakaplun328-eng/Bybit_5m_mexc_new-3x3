@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import tempfile
 from collections import OrderedDict
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -242,29 +243,73 @@ class SignalEngine:
 
 def run_tests():
     tests = [
-        (["GREEN","GREEN","GREEN","RED","RED","RED"], "LONG"),
-        (["RED","RED","RED","GREEN","GREEN","GREEN"], "SHORT"),
-        (["RED","RED","GREEN","GREEN","GREEN","GREEN"], None),
-        (["GREEN","GREEN","GREEN","RED","RED","DOJI"], None),
+        (["GREEN", "GREEN", "GREEN", "RED", "RED", "RED"], "LONG"),
+        (["RED", "RED", "RED", "GREEN", "GREEN", "GREEN"], "SHORT"),
+        (["RED", "RED", "GREEN", "GREEN", "GREEN", "GREEN"], None),
+        (["GREEN", "GREEN", "GREEN", "RED", "RED", "DOJI"], None),
     ]
     for colors, expected in tests:
-        block = [{"open": 1, "close": 0 if c == "RED" else 2 if c == "GREEN" else 1} for c in colors]
+        block = [{"ts": i * TIMEFRAME_SECONDS, "open": 1, "close": 0 if c == "RED" else 2 if c == "GREEN" else 1} for i, c in enumerate(colors)]
         actual = SignalEngine.pattern(block)
         assert (actual["direction"] if actual else None) == expected
-        print("PASS pattern", colors, "=>", expected)
+        print("PASS pattern", "".join({"GREEN":"🟢", "RED":"🔴", "DOJI":"➖"}[c] for c in colors), "=>", expected)
 
     def outcome(direction, colors):
         expected = "RED" if direction == "SHORT" else "GREEN"
         for number, color in enumerate(colors, 7):
-            if color == expected: return ("WIN", number)
+            if color == expected:
+                return ("WIN", number)
         return ("LOSS", 12)
 
-    assert outcome("LONG", ["RED"]*5+["GREEN"]) == ("WIN", 12)
-    assert outcome("SHORT", ["GREEN"]*6) == ("LOSS", 12)
-    assert outcome("LONG", ["GREEN"]+["RED"]*5) == ("WIN", 7)
-    assert outcome("SHORT", ["RED"]+["GREEN"]*5) == ("WIN", 7)
+    assert outcome("LONG", ["RED"] * 5 + ["GREEN"]) == ("WIN", 12)
+    assert outcome("SHORT", ["GREEN"] * 6) == ("LOSS", 12)
+    assert outcome("LONG", ["GREEN"] + ["RED"] * 5) == ("WIN", 7)
+    assert outcome("SHORT", ["RED"] + ["GREEN"] * 5) == ("WIN", 7)
     print("PASS result window #7–#12 inclusive")
-    print("All offline tests passed")
+
+    # Integration-style offline check: synthesize the six-candle pattern and
+    # capture the PRE and SIGNAL messages without calling MEXC or Telegram.
+    captured = []
+    original_send = send_telegram
+    original_time = time.time
+    try:
+        globals()["send_telegram"] = lambda message: captured.append(message) or True
+        base = 1_800_000_000 - (1_800_000_000 % TIMEFRAME_SECONDS)
+        colors = ["GREEN", "GREEN", "GREEN", "RED", "RED", "RED"]
+        candles = []
+        for i, color in enumerate(colors):
+            candles.append({"ts": base + i * TIMEFRAME_SECONDS, "open": 100.0, "close": 101.0 if color == "GREEN" else 99.0})
+
+        # PRE during final minute of candle #6.
+        pre_engine = SignalEngine.__new__(SignalEngine)
+        pre_engine.symbol = "BTC_USDT"
+        pre_engine.candles = OrderedDict((c["ts"], c) for c in candles[:5])
+        pre_engine.pre_sent = set()
+        pre_engine.initialized = True
+        globals()["time"].time = lambda: candles[5]["ts"] + 270
+        pre_engine.maybe_pre_alert(candles[5])
+        assert any("PRE-ALERT" in m and "LONG" in m and "🟢🟢🟢🔴🔴🔴" in m for m in captured), captured
+        print("PASS PRE simulation: LONG PRE-ALERT printed during final minute of candle #6")
+
+        # SIGNAL after candle #6 is closed and ingested.
+        globals()["time"].time = original_time
+        with tempfile.TemporaryDirectory() as tmp:
+            sig_engine = SignalEngine.__new__(SignalEngine)
+            sig_engine.symbol = "BTC_USDT"
+            sig_engine.state_path = os.path.join(tmp, "state.json")
+            sig_engine.state = {"pending": []}
+            sig_engine.pending = []
+            sig_engine.candles = OrderedDict((c["ts"], c) for c in candles[:5])
+            sig_engine.pre_sent = set()
+            sig_engine.initialized = True
+            sig_engine.ingest(candles)
+            assert any("SIGNAL LONG" in m and "🟢🟢🟢🔴🔴🔴" in m and "#7–#12" in m for m in captured), captured
+            print("PASS SIGNAL simulation: LONG SIGNAL printed after candle #6 closes")
+    finally:
+        globals()["send_telegram"] = original_send
+        globals()["time"].time = original_time
+
+    print("All offline tests passed. No live MEXC request or Telegram message was sent.")
 
 
 def main():
