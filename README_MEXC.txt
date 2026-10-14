@@ -9,7 +9,7 @@ MEXC_SYMBOLS=BTCUSDT,ETHUSDT
 TEST_MODE=false
 POLL_SECONDS=10 (optional)
 
-MEXC source: public Contract K-line API, interval=Min5 (native 5-minute candles).
+MEXC source: public Futures Contract K-line API at https://api.mexc.com/api/v1/contract/kline/{symbol}, interval=Min5 (native 5-minute candles). The old contract.mexc.com host was retired in January 2026. If MEXC_FUTURES_KLINE_URL is set in Railway, the code automatically converts the old host to api.mexc.com.
 Symbols are converted to MEXC contract form BTC_USDT and ETH_USDT. No MEXC API key is required for public candle data.
 
 Rules:

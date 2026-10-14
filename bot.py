@@ -17,7 +17,10 @@ TIMEFRAME_LABEL = "5m"
 DEFAULT_SYMBOLS = "BTCUSDT,ETHUSDT"
 POLL_SECONDS = max(5, int(os.getenv("POLL_SECONDS", "10")))
 TEST_MODE = os.getenv("TEST_MODE", "false").strip().lower() in {"1", "true", "yes", "on"}
-API_URL = os.getenv("MEXC_FUTURES_KLINE_URL", "https://contract.mexc.com/api/v1/contract/kline/{symbol}").strip()
+API_URL = os.getenv("MEXC_FUTURES_KLINE_URL", "https://api.mexc.com/api/v1/contract/kline/{symbol}").strip()
+# MEXC retired contract.mexc.com for Futures API access in January 2026.
+# Normalize a legacy Railway variable too, so it cannot silently keep the retired host.
+API_URL = API_URL.replace("https://contract.mexc.com", "https://api.mexc.com")
 
 
 def normalize_symbol(value):
