@@ -133,7 +133,7 @@ def save_state(state, path):
 
 
 class SignalEngine:
-    """Six-candle pattern: first three same color, next three opposite; check #7–#12."""
+    """Six-candle pattern: first three same color, next three opposite; check #7â#13."""
     def __init__(self, symbol):
         self.symbol = symbol
         self.state_path = os.getenv(f"STATE_FILE_{symbol}", f"state_{symbol}.json")
@@ -177,8 +177,8 @@ class SignalEngine:
         if ts in self.pre_sent or ts in self.candles: return
         p = self.pattern_for_live_sixth(live)
         if not p: return
-        pat = "🔴🔴🔴🟢🟢🟢" if p["direction"] == "SHORT" else "🟢🟢🟢🔴🔴🔴"
-        msg = (f"⚠️ PRE-ALERT — {symbol_label(self.symbol)} Futures\nTimeframe: 5m\nPattern: {pat}\n"
+        pat = "ð´ð´ð´ð¢ð¢ð¢" if p["direction"] == "SHORT" else "ð¢ð¢ð¢ð´ð´ð´"
+        msg = (f"â ï¸ PRE-ALERT â {symbol_label(self.symbol)} Futures\nTimeframe: 5m\nPattern: {pat}\n"
                f"Potential direction: {p['direction']}\nCandle #6 closes at {kyiv(ts + TIMEFRAME_SECONDS)} Kyiv time.\nFinal SIGNAL only after close.")
         if send_telegram(msg): self.pre_sent.add(ts)
         log.info("PRE-ALERT | %s | %s", self.symbol, p["direction"])
@@ -208,17 +208,17 @@ class SignalEngine:
             rel = (ts - setup["signal_ts"]) // TIMEFRAME_SECONDS
             if rel < 1:
                 keep.append(setup); continue
-            if rel > 6:
+            if rel > 7:
                 continue
-            number = int(rel) + 6  # rel 1 => candle #7; rel 6 => candle #12
+            number = int(rel) + 6  # rel 1 => candle #7; rel 7 => candle #13
             expected = "RED" if setup["direction"] == "SHORT" else "GREEN"
             if candle_color(current) == expected:
-                send_telegram(f"✅ WIN\n{symbol_label(self.symbol)} MEXC Futures | 5m\nDirection: {setup['direction']}\nMatching candle: #{number}/#12 { '🔴' if expected == 'RED' else '🟢' }\nSignal time: {kyiv(setup.get('start_ts', setup['signal_ts']))} Kyiv time.")
+                send_telegram(f"â WIN\n{symbol_label(self.symbol)} MEXC Futures | 5m\nDirection: {setup['direction']}\nMatching candle: #{number}/#13 { 'ð´' if expected == 'RED' else 'ð¢' }\nSignal time: {kyiv(setup.get('start_ts', setup['signal_ts']))} Kyiv time.")
                 log.info("RESULT WIN | %s | %s | candle #%d", self.symbol, setup["direction"], number)
                 continue
-            if number == 12:
-                send_telegram(f"❌ LOSS\n{symbol_label(self.symbol)} MEXC Futures | 5m\nDirection: {setup['direction']}\nNo matching candle appeared in #7–#12.")
-                log.info("RESULT LOSS | %s | %s | after candle #12", self.symbol, setup["direction"])
+            if number == 13:
+                send_telegram(f"â LOSS\n{symbol_label(self.symbol)} MEXC Futures | 5m\nDirection: {setup['direction']}\nNo matching candle appeared in #7â#13.")
+                log.info("RESULT LOSS | %s | %s | after candle #13", self.symbol, setup["direction"])
                 continue
             keep.append(setup)
         self.pending = keep
@@ -231,14 +231,14 @@ class SignalEngine:
         # Match the exact latest six-candle block; preceding candle color is irrelevant.
         if any(x.get("signal_ts") == ts for x in self.pending): return
         setup = {"start_ts": start_ts, "signal_ts": ts, "direction": p["direction"], "start_color": start_color}
-        pat = "🔴🔴🔴🟢🟢🟢" if p["direction"] == "SHORT" else "🟢🟢🟢🔴🔴🔴"
-        msg = (f"🔔 SIGNAL {p['direction']}\n\n{symbol_label(self.symbol)} MEXC Futures\nTimeframe: 5m\nPattern: {pat}\n"
-               f"Pattern closed: {kyiv(ts + TIMEFRAME_SECONDS)} Kyiv time\nCheck candles #7–#12; first matching candle = WIN, otherwise LOSS after #12.\n\nSignal only — no automatic trading.")
+        pat = "ð´ð´ð´ð¢ð¢ð¢" if p["direction"] == "SHORT" else "ð¢ð¢ð¢ð´ð´ð´"
+        msg = (f"ð SIGNAL {p['direction']}\n\n{symbol_label(self.symbol)} MEXC Futures\nTimeframe: 5m\nPattern: {pat}\n"
+               f"Pattern closed: {kyiv(ts + TIMEFRAME_SECONDS)} Kyiv time\nCheck candles #7â#13; first matching candle = WIN, otherwise LOSS after #13.\n\nSignal only â no automatic trading.")
         sent = send_telegram(msg)
         self.pending.append(setup)
         self.state["pending"] = self.pending
         save_state(self.state, self.state_path)
-        log.info("SIGNAL %s | %s | sent=%s | result_window=#7-#12", p["direction"], self.symbol, sent)
+        log.info("SIGNAL %s | %s | sent=%s | result_window=#7-#13", p["direction"], self.symbol, sent)
 
 
 def run_tests():
@@ -252,20 +252,20 @@ def run_tests():
         block = [{"ts": i * TIMEFRAME_SECONDS, "open": 1, "close": 0 if c == "RED" else 2 if c == "GREEN" else 1} for i, c in enumerate(colors)]
         actual = SignalEngine.pattern(block)
         assert (actual["direction"] if actual else None) == expected
-        print("PASS pattern", "".join({"GREEN":"🟢", "RED":"🔴", "DOJI":"➖"}[c] for c in colors), "=>", expected)
+        print("PASS pattern", "".join({"GREEN":"ð¢", "RED":"ð´", "DOJI":"â"}[c] for c in colors), "=>", expected)
 
     def outcome(direction, colors):
         expected = "RED" if direction == "SHORT" else "GREEN"
         for number, color in enumerate(colors, 7):
             if color == expected:
                 return ("WIN", number)
-        return ("LOSS", 12)
+        return ("LOSS", 13)
 
-    assert outcome("LONG", ["RED"] * 5 + ["GREEN"]) == ("WIN", 12)
-    assert outcome("SHORT", ["GREEN"] * 6) == ("LOSS", 12)
-    assert outcome("LONG", ["GREEN"] + ["RED"] * 5) == ("WIN", 7)
-    assert outcome("SHORT", ["RED"] + ["GREEN"] * 5) == ("WIN", 7)
-    print("PASS result window #7–#12 inclusive")
+    assert outcome("LONG", ["RED"] * 6 + ["GREEN"]) == ("WIN", 13)
+    assert outcome("SHORT", ["GREEN"] * 7) == ("LOSS", 13)
+    assert outcome("LONG", ["GREEN"] + ["RED"] * 6) == ("WIN", 7)
+    assert outcome("SHORT", ["RED"] + ["GREEN"] * 6) == ("WIN", 7)
+    print("PASS result window #7â#13 inclusive")
 
     # Integration-style offline check: synthesize the six-candle pattern and
     # capture the PRE and SIGNAL messages without calling MEXC or Telegram.
@@ -288,7 +288,7 @@ def run_tests():
         pre_engine.initialized = True
         globals()["time"].time = lambda: candles[5]["ts"] + 270
         pre_engine.maybe_pre_alert(candles[5])
-        assert any("PRE-ALERT" in m and "LONG" in m and "🟢🟢🟢🔴🔴🔴" in m for m in captured), captured
+        assert any("PRE-ALERT" in m and "LONG" in m and "ð¢ð¢ð¢ð´ð´ð´" in m for m in captured), captured
         print("PASS PRE simulation: LONG PRE-ALERT printed during final minute of candle #6")
 
         # SIGNAL after candle #6 is closed and ingested.
@@ -303,7 +303,7 @@ def run_tests():
             sig_engine.pre_sent = set()
             sig_engine.initialized = True
             sig_engine.ingest(candles)
-            assert any("SIGNAL LONG" in m and "🟢🟢🟢🔴🔴🔴" in m and "#7–#12" in m for m in captured), captured
+            assert any("SIGNAL LONG" in m and "ð¢ð¢ð¢ð´ð´ð´" in m and "#7â#13" in m for m in captured), captured
             print("PASS SIGNAL simulation: LONG SIGNAL printed after candle #6 closes")
     finally:
         globals()["send_telegram"] = original_send
@@ -315,8 +315,8 @@ def run_tests():
 def main():
     if not SYMBOLS: raise RuntimeError("MEXC_SYMBOLS is empty; set BTCUSDT,ETHUSDT")
     log.info("Started MEXC Futures signal bot for %s on native 5m candles", ", ".join(SYMBOLS))
-    log.info("Patterns: 🟢🟢🟢🔴🔴🔴 => LONG; 🔴🔴🔴🟢🟢🟢 => SHORT; result window #7–#12")
-    if TOKEN and CHAT_IDS: send_telegram(f"🤖 BOT ONLINE\nMEXC Futures\nSymbols: {', '.join(symbol_label(s) for s in SYMBOLS)}\nTimeframe: 5m\nAlerts only — no automatic orders.")
+    log.info("Patterns: ð¢ð¢ð¢ð´ð´ð´ => LONG; ð´ð´ð´ð¢ð¢ð¢ => SHORT; result window #7â#13")
+    if TOKEN and CHAT_IDS: send_telegram(f"ð¤ BOT ONLINE\nMEXC Futures\nSymbols: {', '.join(symbol_label(s) for s in SYMBOLS)}\nTimeframe: 5m\nAlerts only â no automatic orders.")
     engines = {s: SignalEngine(s) for s in SYMBOLS}
     heartbeat = {}
     while True:
@@ -341,6 +341,6 @@ def main():
 if __name__ == "__main__":
     if TEST_MODE:
         run_tests()
-        print("Timeframe: 5m | MEXC native Min5 | PRE final minute of #6 | SIGNAL after #6 close | WIN/LOSS #7–#12")
+        print("Timeframe: 5m | MEXC native Min5 | PRE final minute of #6 | SIGNAL after #6 close | WIN/LOSS #7â#13")
     else:
         main()
